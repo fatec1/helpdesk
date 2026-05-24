@@ -27,14 +27,38 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Ticket, TicketStatus, User, ViewType, TicketPriority } from './types';
 
 // --- Mock Data ---
-const MOCK_USER: User = {
-  id: 'u1',
-  name: 'João Silva',
-  email: 'joao.silva@empresa.com',
-  role: 'user',
-  department: 'Marketing',
-  avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&q=80'
+type MockAuthUser = User & { password: string };
+
+const MOCK_USERS: MockAuthUser[] = [
+  {
+    id: 'u1',
+    name: 'João Silva',
+    email: 'joao.silva@empresa.com',
+    role: 'user',
+    department: 'Marketing',
+    password: 'password123',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&q=80',
+  },
+  {
+    id: 't1',
+    name: 'Carlos Técnico',
+    email: 'carlos.tecnico@empresa.com',
+    role: 'technician',
+    department: 'Suporte TI',
+    password: 'password123',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&q=80',
+  },
+];
+
+const findUserByEmail = (email: string) =>
+  MOCK_USERS.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+
+const getTicketsForUser = (user: User, tickets: Ticket[]) => {
+  if (user.role === 'technician' || user.role === 'admin') return tickets;
+  return tickets.filter((t) => t.requesterId === user.id);
 };
+
+const isTechnician = (user: User) => user.role === 'technician' || user.role === 'admin';
 
 const MOCK_TICKETS: Ticket[] = [
   {
@@ -85,7 +109,20 @@ const MOCK_TICKETS: Ticket[] = [
       { id: 'm4', senderId: 'u1', senderName: 'João Silva', text: 'Senha expirada, preciso de ajuda.', timestamp: '2026-05-07T09:00:00Z' },
       { id: 'm5', senderId: 'system', senderName: 'Sistema', text: 'Chamado resolvido com sucesso.', timestamp: '2026-05-07T10:15:00Z', isSystem: true }
     ]
-  }
+  },
+  {
+    id: 'CH-2024-004',
+    title: 'Erro ao exportar relatório no ERP',
+    description: 'Ao clicar em exportar PDF o sistema trava na tela de carregamento.',
+    status: 'Aberto',
+    priority: 'Média',
+    category: 'Sistemas',
+    requesterId: 'u2',
+    requesterName: 'Maria Santos',
+    createdAt: '2026-05-10T11:00:00Z',
+    updatedAt: '2026-05-10T11:00:00Z',
+    messages: [],
+  },
 ];
 
 // --- Components ---
@@ -122,16 +159,32 @@ const PriorityBadge = ({ priority }: { priority: TicketPriority }) => {
 };
 
 // --- View: Login ---
-const LoginView = ({ onLogin }: { onLogin: () => void }) => {
+const LoginView = ({ onLogin }: { onLogin: (user: User) => void }) => {
   const [showRecover, setShowRecover] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [email, setEmail] = useState('joao.silva@empresa.com');
+  const [password, setPassword] = useState('password123');
+  const [loginError, setLoginError] = useState('');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError('');
+    const user = findUserByEmail(email);
+    if (!user || user.password !== password) {
+      setLoginError('E-mail ou senha inválidos.');
+      return;
+    }
     setIsLoggingIn(true);
     setTimeout(() => {
-      onLogin();
-    }, 1500);
+      const { password: _, ...authUser } = user;
+      onLogin(authUser);
+    }, 800);
+  };
+
+  const fillDemo = (demoEmail: string) => {
+    setEmail(demoEmail);
+    setPassword('password123');
+    setLoginError('');
   };
 
   return (
@@ -156,9 +209,10 @@ const LoginView = ({ onLogin }: { onLogin: () => void }) => {
               <input 
                 type="email" 
                 required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none text-slate-900"
                 placeholder="nome.sobrenome@empresa.com"
-                defaultValue="joao.silva@empresa.com"
               />
             </div>
             <div>
@@ -175,10 +229,34 @@ const LoginView = ({ onLogin }: { onLogin: () => void }) => {
               <input 
                 type="password" 
                 required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none text-slate-900"
                 placeholder="••••••••"
-                defaultValue="password123"
               />
+            </div>
+            {loginError && (
+              <p className="text-sm text-red-600 font-medium">{loginError}</p>
+            )}
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Contas de demonstração</p>
+              <p className="text-xs text-slate-500">Senha: <span className="font-mono">password123</span></p>
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => fillDemo('joao.silva@empresa.com')}
+                  className="text-left text-xs text-indigo-600 hover:underline font-medium"
+                >
+                  João Silva — solicitante (Marketing)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fillDemo('carlos.tecnico@empresa.com')}
+                  className="text-left text-xs text-indigo-600 hover:underline font-medium"
+                >
+                  Carlos Técnico — suporte (TI)
+                </button>
+              </div>
             </div>
             <div className="flex items-center">
               <input 
@@ -248,27 +326,41 @@ const DashboardView = ({ tickets, user, setView, setCurrentTicket }: {
   setView: (v: ViewType) => void,
   setCurrentTicket: (t: Ticket) => void
 }) => {
-  const stats = [
-    { label: 'Meus Chamados', value: tickets.length, icon: TicketIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { label: 'Em Andamento', value: tickets.filter(t => t.status === 'Em Andamento').length, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { label: 'Resolvidos', value: tickets.filter(t => t.status === 'Resolvido').length, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { label: 'Critérios de SLA', value: '98%', icon: BarChart3, color: 'text-purple-600', bg: 'bg-purple-50' },
-  ];
+  const tech = isTechnician(user);
+  const stats = tech
+    ? [
+        { label: 'Fila Total', value: tickets.length, icon: TicketIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+        { label: 'Em Andamento', value: tickets.filter((t) => t.status === 'Em Andamento').length, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+        { label: 'Abertos', value: tickets.filter((t) => t.status === 'Aberto').length, icon: AlertCircle, color: 'text-orange-600', bg: 'bg-orange-50' },
+        { label: 'Resolvidos', value: tickets.filter((t) => t.status === 'Resolvido').length, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+      ]
+    : [
+        { label: 'Meus Chamados', value: tickets.length, icon: TicketIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+        { label: 'Em Andamento', value: tickets.filter((t) => t.status === 'Em Andamento').length, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+        { label: 'Resolvidos', value: tickets.filter((t) => t.status === 'Resolvido').length, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { label: 'Critérios de SLA', value: '98%', icon: BarChart3, color: 'text-purple-600', bg: 'bg-purple-50' },
+      ];
 
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 font-display">Olá, {user.name.split(' ')[0]}</h2>
-          <p className="text-slate-500">Veja o que está acontecendo com seus suportes hoje.</p>
+          <p className="text-slate-500">
+            {tech
+              ? 'Painel da equipe de suporte — todos os chamados da fila.'
+              : 'Veja o que está acontecendo com seus suportes hoje.'}
+          </p>
         </div>
-        <button 
-          onClick={() => setView('CREATE_TICKET')}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-semibold flex items-center gap-2 shadow-sm transition-all"
-        >
-          <PlusCircle size={20} />
-          Novo Chamado
-        </button>
+        {!tech && (
+          <button 
+            onClick={() => setView('CREATE_TICKET')}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-semibold flex items-center gap-2 shadow-sm transition-all"
+          >
+            <PlusCircle size={20} />
+            Novo Chamado
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -376,19 +468,23 @@ const DashboardView = ({ tickets, user, setView, setCurrentTicket }: {
 };
 
 // --- View: Ticket List ---
-const TicketListView = ({ tickets, setCurrentTicket, setView }: { 
+const TicketListView = ({ tickets, user, setCurrentTicket, setView }: { 
   tickets: Ticket[], 
+  user: User,
   setCurrentTicket: (t: Ticket) => void,
   setView: (v: ViewType) => void 
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const tech = isTechnician(user);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 font-display">Lista de Chamados</h2>
-          <p className="text-slate-500">Gerencie e acompanhe todos os seus suportes.</p>
+          <p className="text-slate-500">
+            {tech ? 'Fila geral — atenda chamados de todos os solicitantes.' : 'Gerencie e acompanhe todos os seus suportes.'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -413,6 +509,9 @@ const TicketListView = ({ tickets, setCurrentTicket, setView }: {
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">ID</th>
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Assunto</th>
+              {tech && (
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Solicitante</th>
+              )}
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Prioridade</th>
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Criado em</th>
@@ -429,6 +528,9 @@ const TicketListView = ({ tickets, setCurrentTicket, setView }: {
                   <p className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors">{ticket.title}</p>
                   <p className="text-xs text-slate-500 truncate max-w-xs">{ticket.category}</p>
                 </td>
+                {tech && (
+                  <td className="px-6 py-4 text-sm text-slate-700">{ticket.requesterName}</td>
+                )}
                 <td className="px-6 py-4">
                   <PriorityBadge priority={ticket.priority} />
                 </td>
@@ -578,9 +680,49 @@ const CreateTicketView = ({ onBack, onSubmit }: { onBack: () => void, onSubmit: 
   );
 };
 
+const STATUS_SYSTEM_MESSAGES: Partial<Record<TicketStatus, string>> = {
+  Resolvido: 'Chamado marcado como resolvido.',
+  Aberto: 'Chamado reaberto pelo solicitante.',
+  Cancelado: 'Solicitação cancelada pelo solicitante.',
+};
+
+const applyTicketStatusUpdate = (ticket: Ticket, newStatus: TicketStatus): Ticket => {
+  const now = new Date().toISOString();
+  return {
+    ...ticket,
+    status: newStatus,
+    updatedAt: now,
+    messages: [
+      ...ticket.messages,
+      {
+        id: `m-${Date.now()}`,
+        senderId: 'system',
+        senderName: 'Sistema',
+        text: STATUS_SYSTEM_MESSAGES[newStatus] ?? `Status alterado para ${newStatus}.`,
+        timestamp: now,
+        isSystem: true,
+      },
+    ],
+  };
+};
+
 // --- View: Ticket Detail ---
-const TicketDetailView = ({ ticket, onBack }: { ticket: Ticket, onBack: () => void }) => {
+const TicketDetailView = ({ ticket, currentUser, onBack, onStatusChange, onAssignToMe }: { 
+  ticket: Ticket, 
+  currentUser: User,
+  onBack: () => void,
+  onStatusChange: (status: TicketStatus) => void,
+  onAssignToMe?: () => void,
+}) => {
   const [msgInput, setMsgInput] = useState('');
+  const tech = isTechnician(currentUser);
+  const isOwner = ticket.requesterId === currentUser.id;
+  const canResolve = ticket.status !== 'Resolvido' && ticket.status !== 'Cancelado';
+  const canReopen = ticket.status === 'Resolvido' || ticket.status === 'Cancelado';
+  const canCancel = ticket.status !== 'Cancelado' && (!tech || isOwner);
+  const canUseStatusActions = tech || isOwner;
+  const showAssign = tech && ticket.assigneeId !== currentUser.id && ticket.status !== 'Cancelado' && ticket.status !== 'Resolvido';
+  const disabledBtn = 'opacity-50 cursor-not-allowed';
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -620,16 +762,16 @@ const TicketDetailView = ({ ticket, onBack }: { ticket: Ticket, onBack: () => vo
               </div>
             ) : (
               ticket.messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.isSystem ? 'justify-center' : msg.senderId === MOCK_USER.id ? 'justify-end' : 'justify-start'}`}>
+                <div key={msg.id} className={`flex ${msg.isSystem ? 'justify-center' : msg.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}>
                   {msg.isSystem ? (
                     <div className="bg-slate-200/50 px-4 py-1.5 rounded-full border border-slate-200">
                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{msg.text}</p>
                     </div>
                   ) : (
-                    <div className={`max-w-[80%] space-y-1 ${msg.senderId === MOCK_USER.id ? 'items-end' : 'items-start'}`}>
+                    <div className={`max-w-[80%] space-y-1 ${msg.senderId === currentUser.id ? 'items-end' : 'items-start'}`}>
                       <p className="text-[10px] font-bold text-slate-400 px-1 uppercase">{msg.senderName}</p>
                       <div className={`p-4 rounded-2xl shadow-sm text-sm ${
-                        msg.senderId === MOCK_USER.id 
+                        msg.senderId === currentUser.id 
                           ? 'bg-indigo-600 text-white rounded-tr-none' 
                           : 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'
                       }`}>
@@ -669,6 +811,12 @@ const TicketDetailView = ({ ticket, onBack }: { ticket: Ticket, onBack: () => vo
           <div>
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Estado Atual</h3>
             <div className="space-y-4">
+              {tech && (
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Solicitante</label>
+                  <p className="text-sm font-semibold text-slate-700">{ticket.requesterName}</p>
+                </div>
+              )}
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Status</label>
                 <div className="w-full">
@@ -692,11 +840,47 @@ const TicketDetailView = ({ ticket, onBack }: { ticket: Ticket, onBack: () => vo
           </div>
 
           <div className="pt-6 border-t border-slate-100">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Ações de Resolvimento</h3>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
+              {tech ? 'Ações do Suporte' : 'Ações de Resolvimento'}
+            </h3>
             <div className="space-y-2">
-              <button className="w-full px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-sm font-bold hover:bg-emerald-100 transition-colors">Marcar como Resolvido</button>
-              <button className="w-full px-4 py-2 bg-slate-50 text-slate-600 border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-100 transition-colors">Reabrir Chamado</button>
-              <button className="w-full px-4 py-2 bg-red-50 text-red-700 border border-red-100 rounded-lg text-sm font-bold hover:bg-red-100 transition-colors">Cancelar Solicitação</button>
+              {showAssign && onAssignToMe && (
+                <button
+                  type="button"
+                  onClick={onAssignToMe}
+                  className="w-full px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors"
+                >
+                  Assumir chamado
+                </button>
+              )}
+              {canUseStatusActions && (
+                <>
+                  <button
+                    type="button"
+                    disabled={!canResolve}
+                    onClick={() => onStatusChange('Resolvido')}
+                    className={`w-full px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-sm font-bold hover:bg-emerald-100 transition-colors ${!canResolve ? disabledBtn : ''}`}
+                  >
+                    Marcar como Resolvido
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canReopen}
+                    onClick={() => onStatusChange('Aberto')}
+                    className={`w-full px-4 py-2 bg-slate-50 text-slate-600 border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-100 transition-colors ${!canReopen ? disabledBtn : ''}`}
+                  >
+                    Reabrir Chamado
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canCancel}
+                    onClick={() => onStatusChange('Cancelado')}
+                    className={`w-full px-4 py-2 bg-red-50 text-red-700 border border-red-100 rounded-lg text-sm font-bold hover:bg-red-100 transition-colors ${!canCancel ? disabledBtn : ''}`}
+                  >
+                    Cancelar Solicitação
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -790,10 +974,13 @@ const AnalyticsView = () => {
 
 // --- Main App Entry ---
 export default function App() {
-  const [view, setView] = useState<ViewType>('LOGIN'); // Start with LOGIN
+  const [view, setView] = useState<ViewType>('LOGIN');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>(MOCK_TICKETS);
   const [currentTicket, setCurrentTicket] = useState<Ticket | null>(null);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
+
+  const visibleTickets = currentUser ? getTicketsForUser(currentUser, tickets) : [];
 
   // Heuristic #1: Visibility of system status
   // Feedbacks are handled via state and transitions
@@ -806,8 +993,8 @@ export default function App() {
       category: data.category || 'Outros',
       priority: data.priority || 'Média',
       status: 'Aberto',
-      requesterId: MOCK_USER.id,
-      requesterName: MOCK_USER.name,
+      requesterId: currentUser!.id,
+      requesterName: currentUser!.name,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       messages: []
@@ -817,6 +1004,49 @@ export default function App() {
     setView('DASHBOARD');
     // Heuristic #1 & #3: Action feedback
     alert('Chamado aberto com sucesso!');
+  };
+
+  const handleUpdateTicketStatus = (ticketId: string, newStatus: TicketStatus) => {
+    const update = (ticket: Ticket) =>
+      ticket.id === ticketId ? applyTicketStatusUpdate(ticket, newStatus) : ticket;
+
+    setTickets(prev => prev.map(update));
+    setCurrentTicket(prev => (prev?.id === ticketId ? update(prev) : prev));
+  };
+
+  const handleAssignTicket = (ticketId: string) => {
+    if (!currentUser) return;
+    const now = new Date().toISOString();
+    const patch = (ticket: Ticket): Ticket =>
+      ticket.id === ticketId
+        ? {
+            ...ticket,
+            assigneeId: currentUser.id,
+            assigneeName: currentUser.name,
+            status: ticket.status === 'Aberto' ? 'Em Andamento' : ticket.status,
+            updatedAt: now,
+            messages: [
+              ...ticket.messages,
+              {
+                id: `m-${Date.now()}`,
+                senderId: 'system',
+                senderName: 'Sistema',
+                text: `Chamado assumido por ${currentUser.name}.`,
+                timestamp: now,
+                isSystem: true,
+              },
+            ],
+          }
+        : ticket;
+
+    setTickets((prev) => prev.map(patch));
+    setCurrentTicket((prev) => (prev?.id === ticketId ? patch(prev) : prev));
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setCurrentTicket(null);
+    setView('LOGIN');
   };
 
   const SidebarItem = ({ icon: Icon, label, id, active }: { icon: any, label: string, id: ViewType, active: boolean }) => (
@@ -834,7 +1064,18 @@ export default function App() {
     </button>
   );
 
-  if (view === 'LOGIN') return <LoginView onLogin={() => setView('DASHBOARD')} />;
+  if (view === 'LOGIN' || !currentUser) {
+    return (
+      <LoginView
+        onLogin={(user) => {
+          setCurrentUser(user);
+          setView('DASHBOARD');
+        }}
+      />
+    );
+  }
+
+  const tech = isTechnician(currentUser);
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex overflow-hidden">
@@ -849,16 +1090,20 @@ export default function App() {
 
         <nav className="flex-1 px-4 py-6 space-y-2">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" id="DASHBOARD" active={view === 'DASHBOARD'} />
-          <SidebarItem icon={TicketIcon} label="Chamados" id="TICKET_LIST" active={view === 'TICKET_LIST' || view === 'TICKET_DETAIL'} />
-          <SidebarItem icon={PlusCircle} label="Novo Chamado" id="CREATE_TICKET" active={view === 'CREATE_TICKET'} />
-          <SidebarItem icon={BarChart3} label="Estatísticas" id="ANALYTICS" active={view === 'ANALYTICS'} />
+          <SidebarItem icon={TicketIcon} label={tech ? 'Fila de Chamados' : 'Chamados'} id="TICKET_LIST" active={view === 'TICKET_LIST' || view === 'TICKET_DETAIL'} />
+          {!tech && (
+            <SidebarItem icon={PlusCircle} label="Novo Chamado" id="CREATE_TICKET" active={view === 'CREATE_TICKET'} />
+          )}
+          {tech && (
+            <SidebarItem icon={BarChart3} label="Estatísticas" id="ANALYTICS" active={view === 'ANALYTICS'} />
+          )}
         </nav>
 
         <div className="px-4 py-6 border-t border-slate-100 space-y-2">
           <SidebarItem icon={Settings} label="Configurações" id="DASHBOARD" active={false} />
           <SidebarItem icon={HelpCircle} label="Ajuda / FAQ" id="DASHBOARD" active={false} />
           <button 
-            onClick={() => setView('LOGIN')}
+            onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50 transition-colors font-semibold text-sm"
           >
             <LogOut size={20} />
@@ -888,11 +1133,13 @@ export default function App() {
             <div className="w-px h-6 bg-slate-200"></div>
             <div className="flex items-center gap-3 pl-2">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold text-slate-900 tracking-tight leading-none">{MOCK_USER.name}</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{MOCK_USER.department}</p>
+                <p className="text-sm font-bold text-slate-900 tracking-tight leading-none">{currentUser.name}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                  {tech ? 'Técnico de Suporte' : currentUser.department}
+                </p>
               </div>
               <img 
-                src={MOCK_USER.avatar} 
+                src={currentUser.avatar} 
                 alt="Profile" 
                 className="w-10 h-10 rounded-xl object-cover border border-slate-200 shadow-sm transition-transform hover:scale-105 cursor-pointer"
               />
@@ -912,15 +1159,16 @@ export default function App() {
             >
               {view === 'DASHBOARD' && (
                 <DashboardView 
-                  tickets={tickets} 
-                  user={MOCK_USER} 
+                  tickets={visibleTickets} 
+                  user={currentUser} 
                   setView={setView} 
                   setCurrentTicket={setCurrentTicket}
                 />
               )}
               {view === 'TICKET_LIST' && (
                 <TicketListView 
-                  tickets={tickets} 
+                  tickets={visibleTickets} 
+                  user={currentUser}
                   setCurrentTicket={setCurrentTicket}
                   setView={setView}
                 />
@@ -934,7 +1182,12 @@ export default function App() {
               {view === 'TICKET_DETAIL' && currentTicket && (
                 <TicketDetailView 
                   ticket={currentTicket}
+                  currentUser={currentUser}
                   onBack={() => setView('TICKET_LIST')}
+                  onStatusChange={(status) => handleUpdateTicketStatus(currentTicket.id, status)}
+                  onAssignToMe={
+                    tech ? () => handleAssignTicket(currentTicket.id) : undefined
+                  }
                 />
               )}
               {view === 'ANALYTICS' && (
